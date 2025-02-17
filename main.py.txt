@@ -1,0 +1,188 @@
+import discord
+from discord.ext import commands
+import os
+from replit import db
+
+# Initialize the database if it doesn't exist
+CURRENT_ALBUM = "Mistycal Voyage"  # Update for new seasons
+if CURRENT_ALBUM not in db:
+    db[CURRENT_ALBUM] = {}
+
+# Set up the bot
+TOKEN = os.getenv("DISCORD_BOT_TOKEN")
+intents = discord.Intents.default()
+intents.messages = True
+intents.message_content = True
+bot = commands.Bot(command_prefix="!", intents=intents)
+
+# Constants
+SUBTHEMES = [
+    "Detective", "Animals", "Stroll", "Cuisine", "Desserts", "Vegetables", "Rugby", "Home",
+    "Travel", "Hospital", "Space", "Crafts", "Shopping", "Celebration", "Candy",
+    "Gold Miner", "Police & Thief", "Cup", "Frog Prince", "Volcano", "Tennis",
+    "Atlantis", "Claw Machine", "Peak Cabin", "Dog Park", "Barber Shop", "Masquerade",
+    "Kid's Park", "Live Streaming", "Spring Outing", "St. Patrick's Day", "Easter"
+]
+SUBTHEMES_LOWER = [s.lower() for s in SUBTHEMES]  # For case-insensitive checks
+
+# Command to add cards organized by album and subtheme
+@bot.command()
+async def add(ctx, subtheme, *, card):
+    subtheme_lower = subtheme.lower()
+    if subtheme_lower not in SUBTHEMES_LOWER:
+        await ctx.send(f"The subtheme '{subtheme}' does not exist! Please check the list.")
+        return
+
+    # Find the correctly capitalized subtheme name
+    subtheme_correct = SUBTHEMES[SUBTHEMES_LOWER.index(subtheme_lower)]
+
+    if CURRENT_ALBUM not in db:
+        db[CURRENT_ALBUM] = {}
+
+    if subtheme_correct not in db[CURRENT_ALBUM]:
+        db[CURRENT_ALBUM][subtheme_correct] = {}
+
+    user = str(ctx.author.id)
+    if user not in db[CURRENT_ALBUM][subtheme_correct]:
+        db[CURRENT_ALBUM][subtheme_correct][user] = []
+
+    db[CURRENT_ALBUM][subtheme_correct][user].append(card)
+    await ctx.send(f"{ctx.author.name} added the card '{card}' in the subtheme '{subtheme_correct}'!")
+
+# Command to list registered cards by subtheme
+@bot.command()
+async def list(ctx, subtheme):
+    subtheme_lower = subtheme.lower()
+    if subtheme_lower not in SUBTHEMES_LOWER:
+        await ctx.send(f"The subtheme '{subtheme}' does not exist! Please check the list.")
+        return
+
+    subtheme_correct = SUBTHEMES[SUBTHEMES_LOWER.index(subtheme_lower)]
+
+    if CURRENT_ALBUM not in db or subtheme_correct not in db[CURRENT_ALBUM]:
+        await ctx.send(f"No cards have been registered in the subtheme '{subtheme_correct}' yet.")
+        return
+
+    response = f"Registered cards in the subtheme '{subtheme_correct}':\n"
+    for user, cards in db[CURRENT_ALBUM][subtheme_correct].items():
+        response += f"<@{user}>: {', '.join(cards)}\n"
+
+    await ctx.send(response)
+
+# Command to list all subthemes stored in the database
+@bot.command(name="subtheme")
+async def subtheme(ctx):
+    response = "Available subthemes:\n" + "\n".join(SUBTHEMES)
+    await ctx.send(response)
+
+# Command to find a specific card in a subtheme
+@bot.command()
+async def find(ctx, subtheme, *, card):
+    subtheme_lower = subtheme.lower()
+    if subtheme_lower not in SUBTHEMES_LOWER:
+        await ctx.send(f"The subtheme '{subtheme}' does not exist! Please check the list.")
+        return
+
+    subtheme_correct = SUBTHEMES[SUBTHEMES_LOWER.index(subtheme_lower)]
+
+    if CURRENT_ALBUM not in db or subtheme_correct not in db[CURRENT_ALBUM]:
+        await ctx.send(f"No cards have been registered in the subtheme '{subtheme_correct}' yet.")
+        return
+
+    found_users = []
+    for user, cards in db[CURRENT_ALBUM][subtheme_correct].items():
+        if card in cards:
+            found_users.append(f"<@{user}>")
+
+    if found_users:
+        response = f"The card '{card}' in the subtheme '{subtheme_correct}' is owned by:\n" + "\n".join(found_users)
+    else:
+        response = f"No one has the card '{card}' in the subtheme '{subtheme_correct}' yet."
+
+    await ctx.send(response)
+
+# Command to bulk add multiple cards to a subtheme
+@bot.command()
+async def bulkadd(ctx, subtheme, *, cards):
+    subtheme_lower = subtheme.lower()
+    if subtheme_lower not in SUBTHEMES_LOWER:
+        await ctx.send(f"The subtheme '{subtheme}' does not exist! Please check the list.")
+        return
+
+    subtheme_correct = SUBTHEMES[SUBTHEMES_LOWER.index(subtheme_lower)]
+
+    if CURRENT_ALBUM not in db:
+        db[CURRENT_ALBUM] = {}
+
+    if subtheme_correct not in db[CURRENT_ALBUM]:
+        db[CURRENT_ALBUM][subtheme_correct] = {}
+
+    user = str(ctx.author.id)
+    if user not in db[CURRENT_ALBUM][subtheme_correct]:
+        db[CURRENT_ALBUM][subtheme_correct][user] = []
+
+    card_list = [card.strip() for card in cards.split(",")]
+    db[CURRENT_ALBUM][subtheme_correct][user].extend(card_list)
+
+    await ctx.send(f"{ctx.author.name} added {len(card_list)} cards to the subtheme '{subtheme_correct}'!")
+
+# Command to remove cards from a subtheme
+@bot.command()
+async def remove(ctx, subtheme, *, card_numbers):
+    subtheme_lower = subtheme.lower()
+    if subtheme_lower not in SUBTHEMES_LOWER:
+        await ctx.send(f"The subtheme '{subtheme}' does not exist! Please check the list.")
+        return
+
+    subtheme_correct = SUBTHEMES[SUBTHEMES_LOWER.index(subtheme_lower)]
+
+    user = str(ctx.author.id)
+    if CURRENT_ALBUM not in db or subtheme_correct not in db[CURRENT_ALBUM] or user not in db[CURRENT_ALBUM][subtheme_correct]:
+        await ctx.send(f"You don't have any registered cards in the subtheme '{subtheme_correct}'.")
+        return
+
+    # Convert input numbers to full card format
+    card_list = [f"Card {num.strip()}" for num in card_numbers.split(",")]
+    removed_cards = []
+    for card in card_list:
+        if card in db[CURRENT_ALBUM][subtheme_correct][user]:
+            db[CURRENT_ALBUM][subtheme_correct][user].remove(card)
+            removed_cards.append(card.replace("Card ", ""))
+
+    if removed_cards:
+        await ctx.send(f"The following cards have been removed from '{subtheme_correct}': {', '.join(removed_cards)}")
+    else:
+        await ctx.send(f"None of the specified cards were found in your list for '{subtheme_correct}'.")
+
+# Command to list all cards for the user
+@bot.command()
+async def mycards(ctx):
+    user = str(ctx.author.id)
+    if CURRENT_ALBUM not in db:
+        await ctx.author.send("No album data found.")
+        return
+
+    user_cards = []
+    for subtheme, players in db[CURRENT_ALBUM].items():
+        if user in players and players[user]:
+            cards = ', '.join(players[user])
+            user_cards.append(f"**{subtheme}**: {cards}")
+
+    if user_cards:
+        response = f"Your registered cards:\n" + "\n".join(user_cards)
+    else:
+        response = "You don't have any registered cards."
+
+    try:
+        await ctx.author.send(response)
+        await ctx.send(f"{ctx.author.mention}, I have sent you a private message with your registered cards.")
+    except discord.Forbidden:
+        await ctx.send(f"{ctx.author.mention}, I couldn't send you a DM. Please enable direct messages from server members.")
+
+# Debug command to inspect the database
+@bot.command()
+async def debug_db(ctx):
+    await ctx.send(f"Database contents: {db}")
+
+# Run the bot
+bot.run(TOKEN)
